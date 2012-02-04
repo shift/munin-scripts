@@ -1,0 +1,120 @@
+#!/usr/bin/env ruby
+###############################################################################
+##  ambit2500_ - Munin plugin for Ambit 2500 VirginMedia DOSCIS Cable Modem  ##
+##  Author: Vincent Palmer <shift at someone dot section dot me>             ##
+##  URL: http://github.com/shift/munin                                       ##
+###############################################################################
+
+# Why:
+#   Because VirginMedia in the UK decided in their wisdom to disable SNMP
+#   access to customer cable modems, naming security as the reason :S
+#
+# Status:
+#   Obsolete (switched to nagios+check_mk)
+#
+# Dependencys: 
+#   rubygems
+#   gem nokogiri
+#
+# Install (Ubuntu):
+#   sudo -s
+#   cd /usr/share/munin/plugins
+#   wget https://raw.github.com/shift/munin-scripts/master/ambit2500_
+#   ln -s /usr/share/munin/plguins/ambit2500_ /etc/munin/plugins/ambit2500_up
+#   ln -s /usr/share/munin/plguins/ambit2500_ /etc/munin/plugins/ambit2500_down
+#   ln -s /usr/share/munin/plguins/ambit2500_ /etc/munin/plugins/ambit2500_speed
+#   /etc/init.d/munin-node restart
+#   exit
+
+
+require 'rubygems'
+require 'open-uri'
+require 'nokogiri'
+
+# Default username and password for virginmedia provided Ambit 2500 / EDM2500 / 256v2 in the UK
+user = 'root'
+password = 'root'
+
+type = $0.split('_')[1]
+
+if (ARGV[0] == 'config') then
+
+  if (type == 'down') then
+    puts <<-EOF
+graph_scale yes
+graph_category docsis
+graph_args --base -l 0 1000
+graph_vlabel SNR/dB - RPL dBmV
+graph_title DOCSIS Downstream Information
+down_rpl.label Downstream Receive Power Level
+down_rpl.draw LINE2
+down_rpl.type GAUGE
+down_snr.label Downsream SNR
+down_snr.draw LINE2
+down_snr.type GAUGE
+EOF
+
+  elsif (type == 'up') then
+
+  puts <<-EOF
+graph_scale yes
+graph_category docsis
+graph_args --base -l 0 1000
+graph_vlabel dBmV
+graph_title DOCSIS Upstream Information
+up_tpl.draw LINE2
+up_tpl.type GAUGE
+up_tpl.label Upstream Transmit Power Level
+EOF
+
+  elsif (type == 'speed') then
+
+  puts <<-EOF
+graph_scale yes
+graph_category docsis
+graph_args --base -l 0 1024
+graph_vlabel bits
+graph_title DOCSIS Maximum Data Rates
+max_down.label Maximum Downstream Data Rate
+max_down.draw LINE2
+max_down.type GAUGE
+max_up.label Maximum Upstream Data Rate
+max_up.draw LINE2
+max_up.type GAUGE
+max_up_burst.label Maximum Upstream Channel Burst
+max_up_burst.graph no
+EOF
+
+  end
+
+  exit(0)
+end
+
+pages = {
+	'down'	=>	'CmDnstream',
+	'up'	=>	'CmUpstream',
+	'speed'	=>	'CmOpConfig'
+	}
+
+@doc = Nokogiri::HTML(open("http://192.168.100.1/#{pages[type]}.asp", :http_basic_authentication => [user, password]))
+
+types = {
+	'down' => {
+		'down_rpl.value' => '//html/body/center/table/tr/td[2]/table[2]/tr[2]/td/table/tr[2]/td/table/tr[7]/td[2]',
+		'down_snr.value' => '//html/body/center/table/tr/td[2]/table[2]/tr[2]/td/table/tr[2]/td/table/tr[8]/td[2]'
+	       },
+
+	'up' => {
+		'up_tpl.value' => '//html/body/center/table/tr/td[2]/table[2]/tr[2]/td/table/tr[2]/td/table/tr[6]/td[2]'
+	     },
+
+	'speed' => {
+		'max_down.value' => '//html/body/center/table/tr/td[2]/table[2]/tr[2]/td/table/tr[2]/td/table/tr[2]/td[2]',
+		'max_up.value' => '//html/body/center/table/tr/td[2]/table[2]/tr[2]/td/table/tr[2]/td/table/tr[3]/td[2]',
+	        'max_up_burst.value' => '//html/body/center/table/tr/td[2]/table[2]/tr[2]/td/table/tr[2]/td/table/tr[4]/td[2]'
+		}
+	}
+
+types[type].each do |link|
+  puts "#{link[0]} #{@doc.xpath(link[1]).inner_text.split(' ')[0]}"
+end
